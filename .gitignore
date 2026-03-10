@@ -1,0 +1,17 @@
+# R output files
+*.png
+*.jpeg
+*.jpg
+*.pdf
+*.html
+!README.md
+
+# R environment
+.Rhistory
+.RData
+.Rproj.user
+.Rprofile
+
+# OS files
+.DS_Store
+Thumbs.db
