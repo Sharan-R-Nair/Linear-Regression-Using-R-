@@ -4,11 +4,14 @@
 # MILP Model solved using the ompr package in R
 # =============================================================================
 
-# --- Step 1: Install all required packages ---
-install.packages("ompr")
-install.packages("ompr.roi")
-install.packages("ROI")
-install.packages("ROI.plugin.highs")   # HiGHS: faster than GLPK, supports mip_gap
+# --- Step 1: Install all required packages (only if not already installed) ---
+required_packages <- c("ompr", "ompr.roi", "ROI", "ROI.plugin.highs",
+                       "dplyr", "ggplot2", "tidyr")
+for (pkg in required_packages) {
+  if (!requireNamespace(pkg, quietly = TRUE)) {
+    install.packages(pkg)
+  }
+}
 
 # --- Step 2: Load all required libraries (ORDER MATTERS) ---
 library(ROI)               # Must be loaded FIRST, before any plugins
@@ -25,6 +28,15 @@ library(tidyr)
 
 W <- 26  # number of weeks
 R <- 10  # number of rooms
+
+# Solver parameters
+MIP_GAP_TOLERANCE  <- 0.005   # stop when within 0.5% of optimal
+TIME_LIMIT_SECONDS <- 3600    # 1 hour
+
+# Output filenames
+OUTPUT_HEATMAP      <- "room_configuration_heatmap.png"
+OUTPUT_BAY_HOURS    <- "bay_hours_per_week.png"
+OUTPUT_ROOM_HOURS   <- "room_procedure_hours.png"
 
 # Demanded diagnostic hours per week
 P_diag <- c(230, 235, 225, 230, 240, 245,
@@ -167,8 +179,8 @@ cat("\n=== Solving the MILP Model ===\n")
 result <- solve_model(
   model,
   with_ROI(solver = "highs", verbose = TRUE,
-           mip_gap  = 0.005,        # stop when within 0.5% of optimal (SUPPORTED by HiGHS)
-           time_limit = 3600)    # 1 hour in seconds (HiGHS uses seconds, not milliseconds)
+           mip_gap  = MIP_GAP_TOLERANCE,
+           time_limit = TIME_LIMIT_SECONDS)
 )
 
 cat("\n=== Solver Status ===\n")
@@ -385,7 +397,7 @@ p1 <- ggplot(config_df, aes(x = Week, y = Room, fill = Config)) +
         plot.title = element_text(face = "bold", size = 14))
 
 print(p1)
-ggsave("room_configuration_heatmap.png", p1, width = 14, height = 5, dpi = 150)
+ggsave(OUTPUT_HEATMAP, p1, width = 14, height = 5, dpi = 150)
 
 # =============================================================================
 # VISUALIZATION 2: Aggregated Bay Hours vs Demand
@@ -422,7 +434,7 @@ p2 <- ggplot(agg_long, aes(x = Week, y = Hours, fill = Type)) +
   theme(plot.title = element_text(face = "bold", size = 14))
 
 print(p2)
-ggsave("bay_hours_per_week.png", p2, width = 14, height = 5, dpi = 150)
+ggsave(OUTPUT_BAY_HOURS, p2, width = 14, height = 5, dpi = 150)
 
 # =============================================================================
 # VISUALIZATION 3: Per-Room Procedure Hours
@@ -467,7 +479,7 @@ p3 <- ggplot(room_long %>% filter(Hours > 0.01),
   theme(plot.title = element_text(face = "bold", size = 14))
 
 print(p3)
-ggsave("room_procedure_hours.png", p3, width = 16, height = 12, dpi = 150)
+ggsave(OUTPUT_ROOM_HOURS, p3, width = 16, height = 12, dpi = 150)
 
 # =============================================================================
 # FINAL MANAGERIAL STATEMENT
@@ -479,5 +491,6 @@ cat("demand over the 26-week planning horizon is:\n")
 obj_val <- objective_value(result)
 cat("  Total Cost:   ", format(obj_val, big.mark = ","), "Pounds (GBP)\n")
 cat("  Solver Status:", solver_status(result), "\n")
-cat("  MIP Gap:      <= 0.5% (solver stopped at mip_gap = 0.005 tolerance)\n")
+cat(sprintf("  MIP Gap:      <= %.1f%% (solver stopped at mip_gap = %g tolerance)\n",
+            MIP_GAP_TOLERANCE * 100, MIP_GAP_TOLERANCE))
 cat("  The solution is therefore guaranteed to be within 0.5% of the true optimum.\n")
